@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { getOrderDetail } from "@/lib/actions/orders";
 import { ORDER_STATUS_LABEL, ORDER_STATUS_COLOR, PAYMENT_METHOD_LABEL, formatTJS, formatTime } from "@/lib/utils";
 import { CheckCircle, Clock, Package, Truck, MapPin, Phone, Store } from "lucide-react";
+import { OrderItem, OrderStatusLog } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -70,7 +71,7 @@ export default async function OrderPage({ params }: { params: { orderNumber: str
         <div className="bg-white rounded-2xl border border-black/5 overflow-hidden">
           <div className="px-4 py-3 border-b border-black/5"><p className="text-[11px] font-bold uppercase tracking-widest text-black/30">Состав заказа</p></div>
           <div className="divide-y divide-black/5">
-            {order.items.map(item => (<div key={item.id} className="px-4 py-3 flex justify-between text-[13px]"><span className="text-black/70">{item.productName} × {Number(item.quantity)} {item.unit}</span><span className="font-semibold ml-3 shrink-0">{formatTJS(Number(item.totalPrice))}</span></div>))}
+            {order.items.map((item: OrderItem) => (<div key={item.id} className="px-4 py-3 flex justify-between text-[13px]"><span className="text-black/70">{item.productName} × {Number(item.quantity)} {item.unit}</span><span className="font-semibold ml-3 shrink-0">{formatTJS(Number(item.totalPrice))}</span></div>))}
           </div>
           <div className="px-4 py-3 bg-[#f7f5f0] border-t border-black/5">
             <div className="flex justify-between text-[12px] text-black/45 mb-1"><span>Доставка</span><span>{formatTJS(Number(order.deliveryFee))}</span></div>
@@ -86,7 +87,7 @@ export default async function OrderPage({ params }: { params: { orderNumber: str
         <div className="bg-white rounded-2xl border border-black/5 overflow-hidden">
           <div className="px-4 py-3 border-b border-black/5"><p className="text-[11px] font-bold uppercase tracking-widest text-black/30">История</p></div>
           <div className="divide-y divide-black/5">
-            {order.statusLogs.map((log,i) => (
+            {order.statusLogs.map((log: OrderStatusLog, i: number) => (
               <div key={log.id} className="px-4 py-3 flex items-start gap-3">
                 <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${i===order.statusLogs.length-1?"bg-[#1a472a]":"bg-black/15"}`}/>
                 <div className="flex-1"><p className="text-[13px] font-semibold">{ORDER_STATUS_LABEL[log.status]??log.status}</p>{log.note&&<p className="text-[11px] text-black/40 mt-0.5">{log.note}</p>}</div>
