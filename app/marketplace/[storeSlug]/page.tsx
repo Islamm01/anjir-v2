@@ -19,7 +19,7 @@ export default async function StoreDetailPage({ params }: { params: { storeSlug:
   });
   if (!store) notFound();
 
-  const byCat = store.products.reduce<Record<string, typeof store.products>>((acc, p) => {
+ const byCat = store.products.reduce((acc: any, p: any) => {
     if (!acc[p.category]) acc[p.category] = [];
     acc[p.category].push(p);
     return acc;
@@ -58,7 +58,7 @@ export default async function StoreDetailPage({ params }: { params: { storeSlug:
           <div key={cat}>
             <h3 className="text-[12px] font-black text-black/40 uppercase tracking-widest mb-3">{CAT_LABEL[cat] ?? cat}</h3>
             <div className="space-y-2">
-              {products.map(product => (
+              {(products as any[]).map((product: any) => (
                 <div key={product.id} className="bg-white rounded-2xl border border-black/5 flex items-center gap-3 p-3">
                   <div className="w-16 h-16 bg-[#f7f5f0] rounded-xl overflow-hidden shrink-0">
                     {product.imageUrl ? <Image src={product.imageUrl} alt={product.nameRu} width={64} height={64} className="object-cover w-full h-full" /> : <div className="w-full h-full flex items-center justify-center text-2xl">🍎</div>}
