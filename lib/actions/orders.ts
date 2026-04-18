@@ -35,11 +35,11 @@ export async function placeOrder(input: z.infer<typeof PlaceSchema>) {
   if (!store.isOpen) return { error: "Магазин сейчас закрыт" };
   const products = await prisma.product.findMany({ where: { id: { in: items.map(i=>i.productId) }, storeId, isAvailable: true } });
   if (products.length !== items.length) return { error: "Один из товаров недоступен" };
-  const pm = new Map(products.map(p => [p.id, p]));
+  const pm = new Map(products.map((p: typeof products[0]) => [p.id, p]));
   let computedSub = 0;
   const validItems = items.map(item => {
     const pr = pm.get(item.productId)!;
-    const up = Number(pr.price); const tp = up * item.quantity; computedSub += tp;
+    const up = pr ? Number((pr as typeof products[0]).price) : 0; const tp = up * item.quantity; computedSub += tp;
     return { ...item, unitPrice: up, totalPrice: tp };
   });
   const commission = calculateCommission(computedSub, Number(store.commissionPct));
@@ -60,7 +60,7 @@ export async function placeOrder(input: z.infer<typeof PlaceSchema>) {
   await notifyStoreNewOrder(order.store.owner.id, orderNumber, order.id);
   if (paymentMethod !== "CASH") {
     const admins = await prisma.user.findMany({ where: { role: { in: ["ADMIN","OPERATOR"] } } });
-    await notifyAdminsPaymentPending(admins.map(a=>a.id), orderNumber, order.id, paymentMethod);
+    await notifyAdminsPaymentPending(admins.map((a: typeof admins[0])=>a.id), orderNumber, order.id, paymentMethod);
   }
   return { success: true, orderNumber, orderId: order.id };
 }
