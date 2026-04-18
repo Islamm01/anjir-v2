@@ -38,7 +38,7 @@ export default async function MarketplacePage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {stores.map(store => (
+            {stores.map((store: (typeof stores)[number]) => (
               <Link key={store.id} href={`/marketplace/${store.slug}`} className="block group">
                 <div className="bg-white rounded-2xl border border-black/5 overflow-hidden hover:shadow-md transition-all">
                   <div className="h-28 bg-[#1a472a]/10 relative">
