@@ -128,6 +128,10 @@ model Order {
   paymentRef      String?
   deliveryAddress String
   deliveryNotes   String?       @db.Text
+  // Guest checkout fields (when order placed without account)
+  guestName   String?
+  guestPhone  String?
+  guestAdress String?
   rejectedReason  String?
   cancelledReason String?
   storeConfirmedAt    DateTime?

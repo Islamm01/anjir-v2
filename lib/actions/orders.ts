@@ -24,6 +24,115 @@ const PlaceSchema = z.object({
   paymentRef: z.string().optional(),
 });
 
+// ── Guest order (no login required) ────────────────────────────────────────
+const GuestOrderSchema = z.object({
+  customerName:    z.string().min(2, "Введите имя"),
+  customerPhone:   z.string().min(7, "Введите телефон"),
+  deliveryAddress: z.string().min(3, "Введите адрес"),
+  notes:           z.string().optional(),
+  storeId:         z.string(),
+  items: z.array(z.object({
+    productId:   z.string(),
+    productName: z.string(),
+    unitPrice:   z.number().positive(),
+    unit:        z.string(),
+    quantity:    z.number().positive(),
+    totalPrice:  z.number().positive(),
+  })).min(1),
+  subtotal:      z.number().positive(),
+  deliveryFee:   z.number().min(0),
+  paymentMethod: z.enum(["CASH", "QR", "TRANSFER"]),
+  paymentRef:    z.string().optional(),
+});
+
+export async function placeGuestOrder(input: z.infer<typeof GuestOrderSchema>) {
+  const p = GuestOrderSchema.safeParse(input);
+  if (!p.success) return { error: p.error.issues[0]?.message ?? "Неверные данные" };
+
+  const { storeId, items, subtotal, deliveryFee, deliveryAddress,
+          customerName, customerPhone, notes, paymentMethod, paymentRef } = p.data;
+
+  const store = await prisma.store.findUnique({
+    where: { id: storeId, isActive: true, isVerified: true },
+  });
+  if (!store)       return { error: "Магазин недоступен" };
+  if (!store.isOpen) return { error: "Магазин сейчас закрыт" };
+
+  // Re-validate prices server-side
+  const products = await prisma.product.findMany({
+    where: { id: { in: items.map(i => i.productId) }, storeId, isAvailable: true },
+  });
+  if (products.length !== items.length) return { error: "Один из товаров недоступен" };
+
+  const pm = new Map(products.map((pr: typeof products[0]) => [pr.id, pr]));
+  let computedSub = 0;
+  const validItems = items.map(item => {
+    const pr = pm.get(item.productId)! as typeof products[0];
+    const up = Number(pr.price);
+    const tp = up * item.quantity;
+    computedSub += tp;
+    return { ...item, unitPrice: up, totalPrice: tp };
+  });
+
+  const commission  = calculateCommission(computedSub, Number(store.commissionPct));
+  const totalAmount = computedSub + deliveryFee;
+  const orderNumber = generateOrderNumber();
+
+  const order = await prisma.order.create({
+    data: {
+      orderNumber,
+      // No customerId — guest order
+      storeId,
+      subtotal:        computedSub,
+      deliveryFee,
+      commission,
+      totalAmount,
+      paymentMethod,
+      paymentStatus:   "PENDING",
+      paymentRef:      paymentRef ?? null,
+      deliveryAddress,
+      // Store guest info in notes field until schema is extended
+      notes:           [
+        `Гость: ${customerName}`,
+        `Тел: ${customerPhone}`,
+        notes ? `Комментарий: ${notes}` : null,
+      ].filter(Boolean).join(" | "),
+      items: {
+        create: validItems.map(i => ({
+          productId:   i.productId,
+          productName: i.productName,
+          unitPrice:   i.unitPrice,
+          unit:        i.unit,
+          quantity:    i.quantity,
+          totalPrice:  i.totalPrice,
+        })),
+      },
+      statusLogs: {
+        create: { status: "NEW_ORDER", actorRole: "guest", note: `Гость: ${customerName} ${customerPhone}` },
+      },
+      payment: {
+        create: { amount: totalAmount, method: paymentMethod, status: "PENDING", reference: paymentRef },
+      },
+    },
+    include: { store: { include: { owner: { select: { id: true } } } } },
+  });
+
+  // Notify store owner
+  await notifyStoreNewOrder(order.store.owner.id, orderNumber, order.id);
+
+  // Notify admins if non-cash payment
+  if (paymentMethod !== "CASH") {
+    const admins = await prisma.user.findMany({
+      where: { role: { in: ["ADMIN", "OPERATOR"] } },
+    });
+    await notifyAdminsPaymentPending(
+      admins.map((a: typeof admins[0]) => a.id), orderNumber, order.id, paymentMethod,
+    );
+  }
+
+  return { success: true, orderNumber, orderId: order.id };
+}
+
 export async function placeOrder(input: z.infer<typeof PlaceSchema>) {
   const session = await getSession();
   if (!session) return { error: "Войдите в систему чтобы оформить заказ" };
