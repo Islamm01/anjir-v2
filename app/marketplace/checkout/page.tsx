@@ -200,8 +200,8 @@ export default function CheckoutPage() {
       }
       startTransition(async () => {
         const result = await placeGuestOrder({
-          customerName:    gName.trim(),
-          customerPhone:   gPhone.trim(),
+          guestName:    gName.trim(),
+          guestPhone:   gPhone.trim(),
           deliveryAddress: gAddress.trim(),
           notes:           gNotes.trim() || undefined,
           storeId:         storeId!,
@@ -218,7 +218,10 @@ export default function CheckoutPage() {
           paymentMethod: payment,
           paymentRef:    payment === "TRANSFER" ? tRef.trim() : undefined,
         });
-        if (result.error) { setError(result.error); return; }
+        if (!("orderNumber" in result)) {
+          setError("error" in result ? (result.error || "Order placement failed") : "Order placement failed");
+          return;
+        }
         clearCart();
         router.push(`/order-success?number=${result.orderNumber}`);
       });
