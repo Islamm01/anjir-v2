@@ -7,6 +7,7 @@ import { ShoppingBag, Package, Clock, ChevronRight, MapPin,
 import { useLang }     from "@/components/providers/LangProvider";
 import LangSwitcher    from "@/components/ui/LangSwitcher";
 import { t, l }        from "@/lib/i18n";
+import SupportButton from "@/components/shared/SupportButton";
 
 export default function HomePage() {
   const { lang } = useLang();
@@ -171,6 +172,7 @@ export default function HomePage() {
         </div>
 
       </div>
+      <SupportButton />
     </div>
   );
 }

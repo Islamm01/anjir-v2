@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { ArrowLeft, Clock, ChevronRight, Star } from "lucide-react";
 import prisma from "@/lib/prisma";
+import SupportButton from "@/components/shared/SupportButton";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Фрукты и сухофрукты" };
@@ -75,6 +76,7 @@ export default async function MarketplacePage() {
           </div>
         )}
       </div>
+      <SupportButton />
     </div>
   );
 }

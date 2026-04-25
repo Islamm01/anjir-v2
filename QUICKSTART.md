@@ -83,7 +83,7 @@ npm run dev
 
 Назначить роль через SQL:
 ```sql
-UPDATE "User" SET role = 'ADMIN' WHERE phone = '+992900000000';
+UPDATE "User" SET role = 'ADMIN' WHERE phone = '+992888688860';
 UPDATE "User" SET role = 'STORE_OWNER' WHERE phone = '+992901000001';
 UPDATE "User" SET role = 'COURIER' WHERE phone = '+992902000001';
 ```
