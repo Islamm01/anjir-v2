@@ -1,52 +1,62 @@
 generator client {
   provider = "prisma-client-js"
 }
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
+// ─── USERS ───────────────────────────────────────────────────────────────────
+
 model User {
-  id         String   @id @default(cuid())
-  phone      String   @unique
-  name       String?
-  email      String?
-  avatarUrl  String?
-  role       UserRole @default(CUSTOMER)
-  isVerified Boolean  @default(false)
-  isActive   Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id           String   @id @default(cuid())
+  phone        String?  @unique        // optional — staff may use username only
+  username     String?  @unique        // for staff login (store/courier/admin)
+  passwordHash String?                 // bcrypt hash — staff only
+  name         String?
+  email        String?
+  avatarUrl    String?
+  role         UserRole @default(CUSTOMER)
+  isVerified   Boolean  @default(true)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   storeProfile   Store?
   courierProfile Courier?
-  orders         Order[]
-  deliveries     Delivery[]
-  otpCodes       OtpCode[]
+  orders         Order[]       // registered customer orders
+  deliveries     Delivery[]    // registered customer deliveries
+  sessions       StaffSession[]
 
+  @@index([username])
   @@index([phone])
   @@index([role])
 }
 
 enum UserRole {
-  CUSTOMER
+  CUSTOMER    // guests who order (no account needed)
   STORE_OWNER
   COURIER
   ADMIN
   OPERATOR
 }
 
-model OtpCode {
-  id        String    @id @default(cuid())
-  userId    String?
-  phone     String
-  code      String
+// Staff sessions (cookie-based, replaces OTP flow)
+model StaffSession {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
   expiresAt DateTime
-  usedAt    DateTime?
-  createdAt DateTime  @default(now())
-  user      User?     @relation(fields: [userId], references: [id])
-  @@index([phone])
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
 }
+
+// ─── STORES ──────────────────────────────────────────────────────────────────
 
 model Store {
   id            String   @id @default(cuid())
@@ -80,6 +90,8 @@ model Store {
   @@index([isActive, isVerified])
 }
 
+// ─── PRODUCTS ─────────────────────────────────────────────────────────────────
+
 model Product {
   id          String          @id @default(cuid())
   storeId     String
@@ -112,12 +124,20 @@ enum ProductCategory {
   OTHER
 }
 
+// ─── ORDERS (marketplace) ────────────────────────────────────────────────────
+
 model Order {
-  id              String        @id @default(cuid())
-  orderNumber     String        @unique
-  customerId      String
-  storeId         String
-  courierId       String?
+  id          String  @id @default(cuid())
+  orderNumber String  @unique
+
+  // Customer — either a registered user OR a guest (both optional)
+  customerId  String?          // null for guest orders
+  guestName   String?          // guest full name
+  guestPhone  String?          // guest phone
+
+  storeId     String
+  courierId   String?
+
   status          OrderStatus   @default(NEW_ORDER)
   subtotal        Decimal       @db.Decimal(12, 2)
   deliveryFee     Decimal       @db.Decimal(10, 2) @default(10)
@@ -128,23 +148,22 @@ model Order {
   paymentRef      String?
   deliveryAddress String
   deliveryNotes   String?       @db.Text
-  // Guest checkout fields (when order placed without account)
-  guestName   String?
-  guestPhone  String?
-  guestAdress String?
+  notes           String?       @db.Text
+
   rejectedReason  String?
   cancelledReason String?
-  storeConfirmedAt    DateTime?
-  preparingStartedAt  DateTime?
-  readyAt             DateTime?
-  courierAssignedAt   DateTime?
-  pickedUpAt          DateTime?
-  deliveredAt         DateTime?
-  completedAt         DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
 
-  customer   User             @relation(fields: [customerId], references: [id])
+  storeConfirmedAt   DateTime?
+  preparingStartedAt DateTime?
+  readyAt            DateTime?
+  courierAssignedAt  DateTime?
+  pickedUpAt         DateTime?
+  deliveredAt        DateTime?
+  completedAt        DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  customer   User?            @relation(fields: [customerId], references: [id])
   store      Store            @relation(fields: [storeId], references: [id])
   courier    Courier?         @relation(fields: [courierId], references: [id])
   items      OrderItem[]
@@ -167,8 +186,10 @@ model OrderItem {
   unit        String
   quantity    Decimal @db.Decimal(10, 2)
   totalPrice  Decimal @db.Decimal(10, 2)
-  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product     Product @relation(fields: [productId], references: [id])
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
   @@index([orderId])
 }
 
@@ -180,7 +201,9 @@ model OrderStatusLog {
   actorId   String?
   actorRole String?
   createdAt DateTime    @default(now())
-  order     Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
   @@index([orderId])
 }
 
@@ -198,10 +221,14 @@ enum OrderStatus {
   CANCELLED
 }
 
+// ─── DELIVERIES (courier service / send a package) ───────────────────────────
+
 model Delivery {
   id             String         @id @default(cuid())
   deliveryNumber String         @unique
-  customerId     String
+  customerId     String?        // null for guest
+  guestName      String?
+  guestPhone     String?
   courierId      String?
   status         DeliveryStatus @default(REQUESTED)
   pickupAddress  String
@@ -222,10 +249,10 @@ model Delivery {
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
-  customer   User                @relation(fields: [customerId], references: [id])
-  courier    Courier?            @relation(fields: [courierId], references: [id])
-  payment    Payment?
-  statusLogs DeliveryStatusLog[]
+  customer    User?               @relation(fields: [customerId], references: [id])
+  courier     Courier?            @relation(fields: [courierId], references: [id])
+  payment     Payment?
+  statusLogs  DeliveryStatusLog[]
 
   @@index([customerId])
   @@index([courierId])
@@ -239,7 +266,9 @@ model DeliveryStatusLog {
   note       String?
   actorId    String?
   createdAt  DateTime       @default(now())
-  delivery   Delivery       @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+
+  delivery Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+
   @@index([deliveryId])
 }
 
@@ -251,6 +280,8 @@ enum DeliveryStatus {
   DELIVERED
   CANCELLED
 }
+
+// ─── COURIERS ─────────────────────────────────────────────────────────────────
 
 model Courier {
   id              String      @id @default(cuid())
@@ -276,6 +307,8 @@ enum VehicleType {
   BIKE
   CAR
 }
+
+// ─── PAYMENTS ─────────────────────────────────────────────────────────────────
 
 model Payment {
   id          String        @id @default(cuid())
@@ -309,6 +342,8 @@ enum PaymentStatus {
   REFUNDED
 }
 
+// ─── STORE PAYOUTS ────────────────────────────────────────────────────────────
+
 model StorePayout {
   id          String       @id @default(cuid())
   storeId     String
@@ -322,7 +357,9 @@ model StorePayout {
   paidAt      DateTime?
   notes       String?
   createdAt   DateTime     @default(now())
-  store       Store        @relation(fields: [storeId], references: [id])
+
+  store Store @relation(fields: [storeId], references: [id])
+
   @@index([storeId, status])
 }
 
@@ -331,6 +368,8 @@ enum PayoutStatus {
   PROCESSING
   PAID
 }
+
+// ─── NOTIFICATIONS ────────────────────────────────────────────────────────────
 
 model Notification {
   id        String           @id @default(cuid())
